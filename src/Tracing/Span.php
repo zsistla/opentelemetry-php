@@ -11,40 +11,44 @@ class Span
     private $name;
     private $spanContext;
     private $parentSpanContext;
-
+    private $spanKind;
     private $start;
     private $end;
     private $statusCode;
     private $statusDescription;
+    private $links;
 
     private $attributes = [];
     private $events = [];
 
-    // todo: missing span kind
-    // https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/api-tracing.md#spankind
+    const SPANKIND_UNSPECIFIED = 0;
+    const SPANKIND_INTERNAL = 1;
+    const SPANKIND_SERVER = 2;
+    const SPANKIND_CLIENT = 3;
+    const SPANKIND_PRODUCER = 4;
+    const SPANKIND_CONSUMER = 5;
 
-    // todo: missing links: https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/api-tracing.md#add-links
-
-    // -> Need to understand the difference between SpanKind and links.  From the documentation:
-    // SpanKind
-    // describes the relationship between the Span, its parents, and its children in a Trace. SpanKind describes two independent properties that benefit tracing systems during analysis.
-    // This was also updated recently -> https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/api-tracing.md#spankind
-
-    // Links 
-    // A Span may be linked to zero or more other Spans (defined by SpanContext) that are causally related. Links can point to SpanContexts inside a single Trace
-    // or across different Traces. Links can be used to represent batched operations where a Span was initiated by multiple initiating Spans, 
-    // each representing a single incoming item being processed in the batch.
-    // https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/overview.md#links-between-spans
-
-    public function __construct(string $name, SpanContext $spanContext, SpanContext $parentSpanContext = null)
+    public function __construct(string $name, SpanContext $spanContext, SpanContext $parentSpanContext = null, int $spanKind  = self::SPANKIND_INTERNAL, iterable $links = [])
     {
         $this->name = $name;
         $this->spanContext = $spanContext;
         $this->parentSpanContext = $parentSpanContext;
+        $this->spanKind == $spanKind;
         $this->start = microtime(true);
         $this->status = Status::OK;
         $this->statusDescription = null;
-        $this->link = addLinks();
+        $this->links = $links;
+    }
+
+    public function getLinks(): iterable
+    {
+        return $this->links;
+    }
+
+    // We are going to have this simple implementation for SpanKind until we see other use cases for it.
+    public function getSpanKind(): int
+    {
+        return $this->spanKind;
     }
 
     public function getContext(): SpanContext
@@ -58,11 +62,10 @@ class Span
         return $this->parentSpanContext !== null ? clone $this->parentSpanContext : null;
     }
 
+    // We're not sure what we are going to need to do with these links now?
     public function addLinks()
     {;
     }
-
-
 
     public function end(int $statusCode = Status::OK, ?string $statusDescription = null, float $timestamp = null): self
     {
