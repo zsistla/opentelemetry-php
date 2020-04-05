@@ -5,7 +5,9 @@
     "license": "Apache-2.0",
     "require": {
         "php": "^7.2",
-        "ext-json": "*"
+        "ext-json": "*",
+        "guzzlehttp/guzzle": "^6.5",
+        "monolog/monolog": "^2.0"
     },
     "authors": [
         {

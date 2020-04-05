@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace OpenTelemetry\Sdk\Trace;
 
 use Exception;
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\Request;
 use InvalidArgumentException;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
 use OpenTelemetry\Sdk\Trace\Zipkin\SpanConverter;
 use OpenTelemetry\Trace as API;
 
@@ -72,15 +76,16 @@ class JaegerExporter implements Exporter
 
         try {
             $json = json_encode($convertedSpans);
-            $contextOptions = [
-                'http' => [
-                    'method' => 'POST',
-                    'header' => 'Content-Type: application/json',
-                    'content' => $json,
-                ],
-            ];
-            $context = stream_context_create($contextOptions);
-            @file_get_contents($this->endpointUrl, false, $context);
+            $client = new Client([
+            'base_uri' => $this->endpointUrl,
+            'timeout' => 2.0,
+            'headers' => ['Content-Type =>' => 'application/json'],
+            ]);
+            $response = $client->request('POST');
+            $log = new Logger('test');
+            $log->pushHandler(new StreamHandler('/tmp/foo.log', Logger::WARNING));
+            $log->warning($response);
+
         } catch (Exception $e) {
             return Exporter::FAILED_RETRYABLE;
         }
