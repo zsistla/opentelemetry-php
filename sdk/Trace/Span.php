@@ -14,8 +14,11 @@ class Span implements API\Span
     private $parentSpanContext;
     private $spanKind;
 
-    private $start;
-    private $end;
+    private $startTimestamp;
+    private $startMoment;
+    private $endTimestamp;
+    private $endMoment;
+
     private $statusCode = API\SpanStatus::OK;
 
     /** @var string  */
@@ -48,7 +51,8 @@ class Span implements API\Span
         $this->spanContext = $spanContext;
         $this->parentSpanContext = $parentSpanContext;
         $this->spanKind = $spanKind;
-        $this->start = Clock::get()->timestamp();
+        $this->startMoment = Clock::get()->now();
+        $this->startTimestamp = Clock::get()->timestamp();
         $this->statusCode = API\SpanStatus::OK;
         $this->statusDescription = API\SpanStatus::DESCRIPTION[$this->statusCode];
 
@@ -76,30 +80,30 @@ class Span implements API\Span
         return $this;
     }
 
-    public function end(int $timestamp = null): API\Span
+    public function end(int $endTimestamp = null): API\Span
     {
-        if (!isset($this->end)) {
-            $this->end = $timestamp ?? Clock::get()->timestamp();
+        if (!isset($this->endTimestamp)) {
+            $this->endTimestamp = $endTimestamp ?? Clock::get()->timestamp();
         }
 
         return $this;
     }
 
-    public function setStartTimestamp(int $timestamp): Span
+    public function setStartTimestamp(int $startTimestamp): Span
     {
-        $this->start = $timestamp;
+        $this->startTimestamp = $startTimestamp;
 
         return $this;
     }
 
     public function getStartTimestamp(): int
     {
-        return $this->start;
+        return $this->startTimestamp;
     }
 
     public function getEndTimestamp(): ?int
     {
-        return $this->end;
+        return $this->endTimestamp;
     }
 
     public function getStatus(): API\SpanStatus
@@ -111,16 +115,16 @@ class Span implements API\Span
     // -> This had an update this past month: https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/api-tracing.md#isrecording
     public function isRecording(): bool
     {
-        return null === $this->end;
+        return null === $this->endTimestamp;
     }
 
     public function getDuration(): ?int
     {
-        if (!$this->end) {
+        if (!$this->endTimestamp) {
             return null;
         }
 
-        return ($this->end - $this->start);
+        return ($this->endTimestamp - $this->startTimestamp);
     }
 
     public function getSpanName(): string
