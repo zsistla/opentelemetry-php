@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OpenTelemetry\Contrib\Otlp;
+namespace OpenTelemetry\Contrib\ZipkinToNewrelic;
 
 use GuzzleHttp\Psr7\Request;
 use Http\Adapter\Guzzle7\Client;
+use InvalidArgumentException;
 use OpenTelemetry\Sdk\Trace;
 use OpenTelemetry\Trace as API;
 use Psr\Http\Client\ClientExceptionInterface;
@@ -13,82 +14,69 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Client\RequestExceptionInterface;
 
+/**
+ * Class ZipkinExporter - implements the export interface for data transfer via Zipkin protocol
+ * @package OpenTelemetry\Exporter
+ *
+ * This is an experimental, non-supported exporter.
+ * It will send PHP Otel trace data end to end across the internet to a functional backend.
+ * Needs a license key to connect.  For a free account/key, go to: https://newrelic.com/signup/
+ */
 class Exporter implements Trace\Exporter
 {
     /**
      * @var string
      */
-    private $endpointURL;
+    private $endpointUrl;
 
     /**
      * @var string
      */
-    private $protocol;
+    private $licenseKey;
 
-    /**
-     * @var string
-     */
-    private $insecure;
-
-    /**
-     * @var string
-     */
-    private $certificateFile;
-
-    /**
-     * @var array
-     */
-    private $headers;
-
-    /**
-     * @var string
-     */
-    private $compression;
-
-    /**
-     * @var int
-     */
-    private $timeout;
     /**
      * @var SpanConverter
      */
     private $spanConverter;
 
     /**
-    * @var bool
-    */
+     * @var bool
+     */
     private $running = true;
 
     /**
      * @var ClientInterface
      */
-
     private $client;
 
-    /**
-     * Exporter constructor.
-     * @param string $serviceName
-     */
     public function __construct(
-        $serviceName,
-        ClientInterface $client=null
+        $name,
+        string $endpointUrl,
+        string $licenseKey,
+        SpanConverter $spanConverter = null,
+        ClientInterface $client = null
     ) {
+        $parsedDsn = parse_url($endpointUrl);
 
-        // Set default values based on presence of env variable
-        $this->endpointURL = getenv('OTEL_EXPORTER_OTLP_ENDPOINT') ?: 'localhost:55680';
-        $this->protocol = getenv('OTEL_EXPORTER_OTLP_PROTOCOL') ?: 'json';
-        $this->insecure = getenv('OTEL_EXPORTER_OTLP_INSECURE') ?: 'false';
-        $this->certificateFile = getenv('OTEL_EXPORTER_OTLP_CERTIFICATE') ?: 'none';
-        $this->headers[] = getenv('OTEL_EXPORTER_OTLP_HEADERS') ?: 'none';
-        $this->compression = getenv('OTEL_EXPORTER_OTLP_COMPRESSION') ?: 'none';
-        $this->timeout =(int) getenv('OTEL_EXPORTER_OTLP_TIMEOUT') ?: 10;
+        if (!is_array($parsedDsn)) {
+            throw new InvalidArgumentException('Unable to parse provided DSN');
+        }
+        if (
+            !isset($parsedDsn['scheme'])
+            || !isset($parsedDsn['host'])
+            || !isset($parsedDsn['path'])
+        ) {
+            throw new InvalidArgumentException('Endpoint should have scheme, host, port and path');
+        }
 
+        $this->licenseKey = $licenseKey;
+        $this->endpointUrl = $endpointUrl;
         $this->client = $client ?? $this->createDefaultClient();
-        $this->spanConverter = new SpanConverter($serviceName);
+        $this->spanConverter = $spanConverter ?? new SpanConverter($name);
     }
 
     /**
-     * Exports the provided Span data via the OTLP protocol
+     * Exports the provided Span data via the Zipkin protocol
      *
      * @param iterable<API\Span> $spans Array of Spans
      * @return int return code, defined on the Exporter interface
@@ -110,20 +98,22 @@ class Exporter implements Trace\Exporter
 
         try {
             $json = json_encode($convertedSpans);
-
-            $this->headers[] = '';
-
-            if ($this->protocol == 'json') {
-                $headers = ['content-type' => 'application/json', 'Content-Encoding' => 'gzip'];
-            }
-
-            $request = new Request('POST', $this->endpointURL, $this->headers, $json);
+            $headers = ['content-type' => 'application/json',
+                        'Api-Key' => $this->licenseKey,
+                        'Data-Format' => 'zipkin',
+                        'Data-Format-Version' => '2', ];
+            $request = new Request('POST', $this->endpointUrl, $headers, $json);
             $response = $this->client->sendRequest($request);
         } catch (RequestExceptionInterface $e) {
             return Trace\Exporter::FAILED_NOT_RETRYABLE;
         } catch (NetworkExceptionInterface | ClientExceptionInterface $e) {
             return Trace\Exporter::FAILED_RETRYABLE;
         }
+
+        $statusCode = $response->getStatusCode();
+        $reason = $response->getReasonPhrase();
+        echo "\nsendRequest response = " . $statusCode . "\n";
+        echo "\nsendRequest response = " . $reason . "\n";
 
         if ($response->getStatusCode() >= 400 && $response->getStatusCode() < 500) {
             return Trace\Exporter::FAILED_NOT_RETRYABLE;
